@@ -10,10 +10,11 @@ import copy
 import pybel
 import sys
 import os
+from pdbfixer import PDBFixer
+from simtk.openmm.app import PDBFile
 
 
-
-def prepare_pdb(infile, outfile, logfile, moebatch = "/aloy/home/acomajuncosa/programs/MOE/moe2020/bin/moebatch"):
+def prepare_pdb_moe(infile, outfile, logfile, moebatch = "/aloy/home/acomajuncosa/programs/MOE/moe2020/bin/moebatch"):
     """
     Prepare a PDB file for rDock docking. Requires MOE license & bin files.
     
@@ -45,7 +46,60 @@ def prepare_pdb(infile, outfile, logfile, moebatch = "/aloy/home/acomajuncosa/pr
         sys.stderr.write(str(stdout) + "\n\n")
         sys.stderr.write(str(stderr) + "\n\n")
         
+
+def prepare_pdb_pdbfixer(infile, outfile, logfile):
+    """
+    Prepare a PDB file for rDock docking using the OpenSource software PDBFixer.
+    
+    Args:
+    
+        infile (str): Path to input structure file (PDB format)
+        outfile (str): Path to output structure file (MOL2 format)
+        logfile (str): Path to LOG file. 
+    """
+
+    try:
+        fixer = PDBFixer(filename = infile)
+        fixer.removeHeterogens(False)
         
+        fixer.missingResidues = {}
+        
+        fixer.findNonstandardResidues()
+        fixer.replaceNonstandardResidues()
+        
+        fixer.findMissingAtoms()
+        fixer.missingTerminals = {}
+        fixer.addMissingAtoms()
+        fixer.addMissingHydrogens(7.0)
+
+        pdb = infile.split("/")[-1].split("_")[0]
+        with open(logfile, "w") as log:
+            log.write("Structure: " + pdb + "\n")
+            log.write("·······················································" + "\n")
+            
+            log.write("Non-standard residues: " + str(len(fixer.nonstandardResidues)) + "\n")
+            for res in fixer.nonstandardResidues:
+                log.write(str(res[0]) + " -> " + str(res[1]) + "\n")
+                
+            log.write("·······················································" + "\n")
+        
+            log.write("Residues missing atoms: " + str(len(fixer.missingAtoms)) + "\n")
+            for res in fixer.missingAtoms.keys():
+                log.write(str(res) + " missing " + str(len(fixer.missingAtoms[res])) + " atoms \n")
+                for atom in fixer.missingAtoms[res]:
+                    log.write("\t" + str(atom) + "\n")
+        
+            log.write("·······················································" + "\n")
+
+        pdb_file = outfile.replace(".mol2", ".pdb")
+        PDBFile.writeFile(fixer.topology, fixer.positions, open(pdb_file, 'w'))
+        mol = next(pybel.readfile("pdb", pdb_file))
+        mol.write("mol2", outfile, overwrite=True)
+
+        sys.stderr.write("Preparation completed")
+
+    except Exception as e:
+        sys.stderr.write(f"Error while preparing: {str(e)}")
         
         
 def create_parameter_file(outfile, path_to_st, path_to_ctr, radius=str(12.0)):
