@@ -281,8 +281,7 @@ def raw_fp(dict_scores, file_order):
     return np.array([dict_scores[i] for i in molecules])
 
 
-
-def select_first_model(path_in, path_out):
+def select_first_model(path_in, path_out, is_mmcif):
     """
     
     Take only the first model of a PDB file (e.g NMR structure)
@@ -291,20 +290,24 @@ def select_first_model(path_in, path_out):
        
         path_in (str): Path to input file
         path_out (str): Path to output file
-        
+        is_mmcif (boolean): Indicates if it is an mmCIF or not. 
     
     """
+    if not is_mmcif:
+        structure = PDBParser(QUIET=True).get_structure("st", path_in)
+        io = PDBIO()
 
-    structure = PDBParser(QUIET=True).get_structure("st", path_in)
+    else:
+        structure = MMCIFParser(QUIET=True).get_structure("st", path_in)
+        io = MMCIFIO()
 
     if len(structure) > 1:
         structure = structure[0]
 
-    io = PDBIO()
     io.set_structure(structure)
     io.save(path_out)
     
-def select_chain(path_in, path_out, chain):
+def select_chain(path_in, path_out, chain, is_mmcif):
     """
     
     Take only the specified chain
@@ -314,22 +317,48 @@ def select_chain(path_in, path_out, chain):
         path_in (str): Path to input file
         path_out (str): Path to output file
         chain (str): Chain ID
-        
+        is_mmcif (boolean): Indicates if it is an mmCIF or not. 
     
     """
 
-    structure = PDBParser(QUIET=True).get_structure("st", path_in)
+    class ChainSelect(Select):
+        def __init__(self, chain_id):
+            self.chain_id = chain_id
 
-    class select_chain(Select):
         def accept_residue(self, residue):
-            if residue.get_parent().id == chain:
+            if residue.get_parent().id == self.chain_id:
                 return 1
             else:
                 return 0
 
-    io = PDBIO()
-    io.set_structure(structure)
-    io.save(path_out, select_chain())
+    if not is_mmcif:
+        structure = PDBParser(QUIET=True).get_structure("st", path_in)
+        io = PDBIO()
+        io.set_structure(structure)
+        io.save(path_out, select_chain())
+
+    else:
+        structure = MMCIFParser(QUIET=True).get_structure("st", path_in)
+        for residue in structure.get_residues():
+            if len(residue.resname) > 3:
+                residue.resname = residue.resname[:3]
+
+        io = MMCIFIO()
+        io.set_structure(structure)
+        path_intermediate = os.path.join(path_out[:-4] + "_intermediate.cif")
+        io.save(path_intermediate, ChainSelect(chain))
+
+
+        structure = MMCIFParser(QUIET=True).get_structure("st", path_intermediate)
+        for c in structure.get_chains():
+            c.id = chain[0]
+            break
+
+        io = PDBIO()
+        io.set_structure(structure)
+        io.save(path_out, ChainSelect(chain[0]))
+        
+        os.remove(path_intermediate)
     
     
 def remove_ligands(path_in, path_out, ligands):
