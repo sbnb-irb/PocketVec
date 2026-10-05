@@ -10,10 +10,11 @@ import copy
 import pybel
 import sys
 import os
+from pdbfixer import PDBFixer
+from simtk.openmm.app import PDBFile
 
 
-
-def prepare_pdb(infile, outfile, logfile, moebatch = "/aloy/home/acomajuncosa/programs/MOE/moe2020/bin/moebatch"):
+def prepare_pdb_moe(infile, outfile, logfile, moebatch = "/aloy/home/acomajuncosa/programs/MOE/moe2020/bin/moebatch"):
     """
     Prepare a PDB file for rDock docking. Requires MOE license & bin files.
     
@@ -45,7 +46,60 @@ def prepare_pdb(infile, outfile, logfile, moebatch = "/aloy/home/acomajuncosa/pr
         sys.stderr.write(str(stdout) + "\n\n")
         sys.stderr.write(str(stderr) + "\n\n")
         
+
+def prepare_pdb_pdbfixer(infile, outfile, logfile):
+    """
+    Prepare a PDB file for rDock docking using the OpenSource software PDBFixer.
+    
+    Args:
+    
+        infile (str): Path to input structure file (PDB format)
+        outfile (str): Path to output structure file (MOL2 format)
+        logfile (str): Path to LOG file. 
+    """
+
+    try:
+        fixer = PDBFixer(filename = infile)
+        fixer.removeHeterogens(False)
         
+        fixer.missingResidues = {}
+        
+        fixer.findNonstandardResidues()
+        fixer.replaceNonstandardResidues()
+        
+        fixer.findMissingAtoms()
+        fixer.missingTerminals = {}
+        fixer.addMissingAtoms()
+        fixer.addMissingHydrogens(7.0)
+
+        pdb = infile.split("/")[-1].split("_")[0]
+        with open(logfile, "w") as log:
+            log.write("Structure: " + pdb + "\n")
+            log.write("·······················································" + "\n")
+            
+            log.write("Non-standard residues: " + str(len(fixer.nonstandardResidues)) + "\n")
+            for res in fixer.nonstandardResidues:
+                log.write(str(res[0]) + " -> " + str(res[1]) + "\n")
+                
+            log.write("·······················································" + "\n")
+        
+            log.write("Residues missing atoms: " + str(len(fixer.missingAtoms)) + "\n")
+            for res in fixer.missingAtoms.keys():
+                log.write(str(res) + " missing " + str(len(fixer.missingAtoms[res])) + " atoms \n")
+                for atom in fixer.missingAtoms[res]:
+                    log.write("\t" + str(atom) + "\n")
+        
+            log.write("·······················································" + "\n")
+
+        pdb_file = outfile.replace(".mol2", ".pdb")
+        PDBFile.writeFile(fixer.topology, fixer.positions, open(pdb_file, 'w'))
+        mol = next(pybel.readfile("pdb", pdb_file))
+        mol.write("mol2", outfile, overwrite=True)
+
+        sys.stderr.write("Preparation completed")
+
+    except Exception as e:
+        sys.stderr.write(f"Error while preparing: {str(e)}")
         
         
 def create_parameter_file(outfile, path_to_st, path_to_ctr, radius=str(12.0)):
@@ -281,8 +335,7 @@ def raw_fp(dict_scores, file_order):
     return np.array([dict_scores[i] for i in molecules])
 
 
-
-def select_first_model(path_in, path_out):
+def select_first_model(path_in, path_out, is_mmcif):
     """
     
     Take only the first model of a PDB file (e.g NMR structure)
@@ -291,20 +344,24 @@ def select_first_model(path_in, path_out):
        
         path_in (str): Path to input file
         path_out (str): Path to output file
-        
+        is_mmcif (boolean): Indicates if it is an mmCIF or not. 
     
     """
+    if not is_mmcif:
+        structure = PDBParser(QUIET=True).get_structure("st", path_in)
+        io = PDBIO()
 
-    structure = PDBParser(QUIET=True).get_structure("st", path_in)
+    else:
+        structure = MMCIFParser(QUIET=True).get_structure("st", path_in)
+        io = MMCIFIO()
 
     if len(structure) > 1:
         structure = structure[0]
 
-    io = PDBIO()
     io.set_structure(structure)
     io.save(path_out)
     
-def select_chain(path_in, path_out, chain):
+def select_chain(path_in, path_out, chain, is_mmcif):
     """
     
     Take only the specified chain
@@ -314,22 +371,48 @@ def select_chain(path_in, path_out, chain):
         path_in (str): Path to input file
         path_out (str): Path to output file
         chain (str): Chain ID
-        
+        is_mmcif (boolean): Indicates if it is an mmCIF or not. 
     
     """
 
-    structure = PDBParser(QUIET=True).get_structure("st", path_in)
+    class ChainSelect(Select):
+        def __init__(self, chain_id):
+            self.chain_id = chain_id
 
-    class select_chain(Select):
         def accept_residue(self, residue):
-            if residue.get_parent().id == chain:
+            if residue.get_parent().id == self.chain_id:
                 return 1
             else:
                 return 0
 
-    io = PDBIO()
-    io.set_structure(structure)
-    io.save(path_out, select_chain())
+    if not is_mmcif:
+        structure = PDBParser(QUIET=True).get_structure("st", path_in)
+        io = PDBIO()
+        io.set_structure(structure)
+        io.save(path_out, select_chain())
+
+    else:
+        structure = MMCIFParser(QUIET=True).get_structure("st", path_in)
+        for residue in structure.get_residues():
+            if len(residue.resname) > 3:
+                residue.resname = residue.resname[:3]
+
+        io = MMCIFIO()
+        io.set_structure(structure)
+        path_intermediate = os.path.join(path_out[:-4] + "_intermediate.cif")
+        io.save(path_intermediate, ChainSelect(chain))
+
+
+        structure = MMCIFParser(QUIET=True).get_structure("st", path_intermediate)
+        for c in structure.get_chains():
+            c.id = chain[0]
+            break
+
+        io = PDBIO()
+        io.set_structure(structure)
+        io.save(path_out, ChainSelect(chain[0]))
+        
+        os.remove(path_intermediate)
     
     
 def remove_ligands(path_in, path_out, ligands):

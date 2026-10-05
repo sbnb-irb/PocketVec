@@ -22,7 +22,7 @@ The **PocketVec Repository** holds the code needed to create a PocketVec descrip
 1. Clone this repository to your local PocketVec folder:
         
         cd ~ && mkdir -p pocketvec && cd pocketvec
-        git clone https://gitlabsbnb.irbbarcelona.org/acomajuncosa/pocketvec.git
+        git clone https://github.com/sbnb-irb/PocketVec.git
 
 2. Create and activate a conda environment with all the requirements:
 
@@ -70,6 +70,7 @@ The complete generation of PocketVec descriptors relies on external software spe
 * [rDock](https://rdock.sourceforge.net/): Docking calculations. We provide a pre-compiled version of rDock in `code/utils/rDock_compiled/`, but this may not suite most of the machines. If this is your case, please consider installing it from [scratch](https://rdock.sourceforge.net/installation/) and changing the --rDock parameter when running PocketVec.
 * [BioBB Structure Checking](https://pypi.org/project/biobb-structure-checking/): Protein preparation.
 * [MOE](https://www.chemcomp.com/): Protein preparation.
+* [PDBFixer](https://github.com/openmm/pdbfixer): Protein preparation. 
 * [OpenBabel](https://github.com/openbabel/openbabel): Protein and Pocket preparation. 
 * [Fpocket](https://github.com/Discngine/fpocket): Pocket detection and scoring.
 * [P2rank](https://github.com/rdk/p2rank): Pocket detection and scoring.

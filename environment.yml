@@ -35,8 +35,10 @@ dependencies:
   - libzlib=1.2.13=h166bdaf_4
   - ncurses=6.3=h27087fc_1
   - openbabel=2.4.1=py37hc189817_1
+  - openmm=7.5.1
   - openssl=3.0.8=h0b41bf4_0
   - pcre2=10.40=hc3806b6_0
+  - pdbfixer=1.7
   - pip=23.0.1=pyhd8ed1ab_0
   - pixman=0.40.0=h36c2ea0_0
   - pthread-stubs=0.4=h36c2ea0_1001
