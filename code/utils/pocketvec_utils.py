@@ -389,7 +389,7 @@ def select_chain(path_in, path_out, chain, is_mmcif):
         structure = PDBParser(QUIET=True).get_structure("st", path_in)
         io = PDBIO()
         io.set_structure(structure)
-        io.save(path_out, select_chain())
+        io.save(path_out, ChainSelect(chain))
 
     else:
         structure = MMCIFParser(QUIET=True).get_structure("st", path_in)
